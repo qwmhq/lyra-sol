@@ -7,11 +7,14 @@ skip-lint = false
 [programs.localnet]
 lyra = "7KhyA7H6JsEPuBXoagDusMY8NiZxrgH58yMaSszEpUGw"
 
+[programs.devnet]
+lyra = "7KhyA7H6JsEPuBXoagDusMY8NiZxrgH58yMaSszEpUGw"
+
 [registry]
 url = "https://api.apr.dev"
 
 [provider]
-cluster = "Localnet"
+cluster = "localnet"
 wallet = "~/.config/solana/id.json"
 
 [scripts]
