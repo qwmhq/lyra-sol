@@ -49,7 +49,7 @@ describe("lyra", () => {
     gameId: new anchor.BN(Math.random() * 10000),
     startTime: new anchor.BN(Math.floor(Date.now() / 1000)),
     duration: new anchor.BN(60 * 60 * 5),
-    initialPrizePool: new anchor.BN(LAMPORTS_PER_SOL / 2),
+    initialPrizePool: new anchor.BN(LAMPORTS_PER_SOL),
   };
   const [gameAddress] = PublicKey.findProgramAddressSync(
     [Buffer.from("game"), gamePayload.gameId.toArrayLike(Buffer, "le", 8)],
@@ -63,7 +63,24 @@ describe("lyra", () => {
     programAddress
   );
 
-  const players = Array(5)
+  interface Player {
+    keypair: Keypair;
+    gameDataAddress: PublicKey;
+  }
+
+  interface Game {
+    gameId: anchor.BN;
+    gameAddress: PublicKey;
+    prizePoolAddress: PublicKey;
+  }
+
+  const game1: Game = {
+    gameId: gamePayload.gameId,
+    gameAddress,
+    prizePoolAddress,
+  };
+
+  const players: Player[] = Array(5)
     .fill(undefined)
     .map((_) => {
       const keypair = Keypair.generate();
@@ -78,6 +95,65 @@ describe("lyra", () => {
       return { keypair, gameDataAddress };
     });
 
+  const brokePlayerKeypair = Keypair.generate();
+  const brokePlayer = {
+    keypair: brokePlayerKeypair,
+    gameDataAddress: PublicKey.findProgramAddressSync(
+      [
+        Buffer.from("game_data"),
+        gamePayload.gameId.toArrayLike(Buffer, "le", 8),
+        brokePlayerKeypair.publicKey.toBuffer(),
+      ],
+      programAddress
+    )[0],
+  };
+
+  // helper functions
+  const initializeConfig = () => {
+    return program.methods
+      .initializeConfig({ ...configPayload })
+      .signers([owner])
+      .rpc();
+  };
+
+  const initializeGame = () => {
+    return program.methods
+      .initializeGame({ ...gamePayload })
+      .accountsStrict({
+        signer: owner.publicKey,
+        config: configAddress,
+        game: gameAddress,
+        prizePool: prizePoolAddress,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([owner])
+      .rpc();
+  };
+
+  const enterGame = (player: Player, game: Game) => {
+    return program.methods
+      .enterGame(game.gameId)
+      .accounts({ player: player.keypair.publicKey })
+      .signers([player.keypair])
+      .rpc();
+  };
+
+  const playGame = (player: Player, game: Game, requestId: anchor.BN) => {
+    return program.methods
+      .playGame(game.gameId, requestId)
+      .accountsStrict({
+        player: player.keypair.publicKey,
+        config: configAddress,
+        game: game.gameAddress,
+        prizePool: game.prizePoolAddress,
+        developerAddress,
+        gameData: player.gameDataAddress,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([player.keypair])
+      .rpc();
+  };
+
   beforeEach(async () => {
     context = await startAnchor(
       "",
@@ -86,7 +162,7 @@ describe("lyra", () => {
         {
           address: owner.publicKey,
           info: {
-            lamports: LAMPORTS_PER_SOL,
+            lamports: 5 * LAMPORTS_PER_SOL,
             data: Buffer.alloc(0),
             owner: SYSTEM_PROGRAM_ID,
             executable: false,
@@ -110,6 +186,15 @@ describe("lyra", () => {
             executable: false,
           },
         })),
+        {
+          address: brokePlayer.keypair.publicKey,
+          info: {
+            lamports: configPayload.baseQueryFee.toNumber() * 0.8,
+            data: Buffer.alloc(0),
+            owner: SYSTEM_PROGRAM_ID,
+            executable: false,
+          },
+        },
       ]
     );
     provider = new BankrunProvider(context);
@@ -156,10 +241,7 @@ describe("lyra", () => {
 
   describe("Initialize Game", () => {
     beforeEach(async () => {
-      await program.methods
-        .initializeConfig({ ...configPayload })
-        .signers([owner])
-        .rpc();
+      await initializeConfig();
     });
 
     it("should return an error when invoked with an unauthorized account", () => {
@@ -216,6 +298,12 @@ describe("lyra", () => {
 
     it("should transfer initial prize pool amount to the prize pool account", async () => {
       const prizePoolBalanceBefore = await client.getBalance(prizePoolAddress);
+      const ownerBalance = await client.getBalance(owner.publicKey);
+      console.log(
+        `\n\nowner balance: ${
+          (Number(ownerBalance) * 1.0) / LAMPORTS_PER_SOL
+        } SOL \n\n`
+      );
 
       await program.methods
         .initializeGame({ ...gamePayload })
@@ -242,22 +330,8 @@ describe("lyra", () => {
 
   describe("enter game", () => {
     beforeEach(async () => {
-      await program.methods
-        .initializeConfig({ ...configPayload })
-        .signers([owner])
-        .rpc();
-
-      await program.methods
-        .initializeGame({ ...gamePayload })
-        .accountsStrict({
-          signer: owner.publicKey,
-          config: configAddress,
-          game: gameAddress,
-          prizePool: prizePoolAddress,
-          systemProgram: SystemProgram.programId,
-        })
-        .signers([owner])
-        .rpc();
+      await initializeConfig();
+      await initializeGame();
     });
 
     it("should return an error if the game has not started", async () => {});
@@ -304,28 +378,9 @@ describe("lyra", () => {
 
   describe("play game", () => {
     beforeEach(async () => {
-      await program.methods
-        .initializeConfig({ ...configPayload })
-        .signers([owner])
-        .rpc();
-
-      await program.methods
-        .initializeGame({ ...gamePayload })
-        .accountsStrict({
-          signer: owner.publicKey,
-          config: configAddress,
-          game: gameAddress,
-          prizePool: prizePoolAddress,
-          systemProgram: SystemProgram.programId,
-        })
-        .signers([owner])
-        .rpc();
-
-      await program.methods
-        .enterGame(gamePayload.gameId)
-        .accounts({ player: players[0].keypair.publicKey })
-        .signers([players[0].keypair])
-        .rpc();
+      await initializeConfig();
+      await initializeGame();
+      await enterGame(players[0], game1);
     });
 
     const gameId = gamePayload.gameId;
@@ -334,6 +389,30 @@ describe("lyra", () => {
     it("should return an error if the game has not started", async () => {});
 
     it("should return an error if the game has ended", async () => {});
+
+    it("should return an error if player has insufficient balance to cover the query fee", async () => {
+      await program.methods
+        .enterGame(gamePayload.gameId)
+        .accounts({ player: brokePlayer.keypair.publicKey })
+        .signers([brokePlayer.keypair])
+        .rpc();
+
+      const promise = program.methods
+        .playGame(gameId, requestId)
+        .accountsStrict({
+          player: brokePlayer.keypair.publicKey,
+          config: configAddress,
+          game: gameAddress,
+          prizePool: prizePoolAddress,
+          developerAddress,
+          gameData: brokePlayer.gameDataAddress,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([brokePlayer.keypair])
+        .rpc();
+
+      return expect(promise).to.be.rejectedWith(Error, "InsufficientQueryFee");
+    });
 
     it("should transfer appropriate amount to prize pool and developer accounts", async () => {
       const game = await program.account.gameAccount.fetch(gameAddress);
@@ -426,6 +505,8 @@ describe("lyra", () => {
 
     it("should store the player attempt", async () => {
       const game = await program.account.gameAccount.fetch(gameAddress);
+      const prizePoolShare =
+        (game.currentQueryFee.toNumber() * game.prizePoolPercentage) / 100;
 
       await program.methods
         .playGame(gameId, requestId)
@@ -453,9 +534,7 @@ describe("lyra", () => {
       );
       expect(attempt).to.not.be.undefined;
       expect(attempt.requestId.toNumber()).to.equal(requestId.toNumber());
-      expect(attempt.fee.toNumber()).to.equal(
-        game.currentQueryFee.toNumber() * (game.prizePoolPercentage / 100)
-      );
+      expect(attempt.fee.toNumber()).to.equal(prizePoolShare);
     });
 
     it("should increment the attempt count on the game account", async () => {
@@ -485,51 +564,13 @@ describe("lyra", () => {
 
   describe("declare winner", () => {
     beforeEach(async () => {
-      await program.methods
-        .initializeConfig({ ...configPayload })
-        .signers([owner])
-        .rpc();
-
-      await program.methods
-        .initializeGame({ ...gamePayload })
-        .accountsStrict({
-          signer: owner.publicKey,
-          config: configAddress,
-          game: gameAddress,
-          prizePool: prizePoolAddress,
-          systemProgram: SystemProgram.programId,
-        })
-        .signers([owner])
-        .rpc();
-
+      await initializeConfig();
+      await initializeGame();
+      await Promise.all(players.map((player) => enterGame(player, game1)));
       await Promise.all(
         players.map((player) => {
-          return program.methods
-            .enterGame(gamePayload.gameId)
-            .accounts({ player: player.keypair.publicKey })
-            .signers([player.keypair])
-            .rpc();
-        })
-      );
-
-      await Promise.all(
-        players.map((player) => {
-          const gameId = gamePayload.gameId;
           const requestId = new anchor.BN(Math.random() * 10000);
-
-          return program.methods
-            .playGame(gameId, requestId)
-            .accountsStrict({
-              player: player.keypair.publicKey,
-              config: configAddress,
-              game: gameAddress,
-              prizePool: prizePoolAddress,
-              developerAddress,
-              gameData: player.gameDataAddress,
-              systemProgram: SystemProgram.programId,
-            })
-            .signers([player.keypair])
-            .rpc();
+          return playGame(player, game1, requestId);
         })
       );
     });
@@ -561,8 +602,6 @@ describe("lyra", () => {
     it("should return an error if the game has not started", async () => {});
 
     it("should return an error if the game has ended", async () => {});
-
-    it("should return an error if a winner has already been declared", async () => {});
 
     it("should transfer prize pool balance to the winner", async () => {
       const gameId = gamePayload.gameId;
@@ -612,6 +651,62 @@ describe("lyra", () => {
       expect(winnerBalanceAfter).to.equal(
         winnerBalanceBefore + BigInt(game.prizePool.toNumber())
       );
+    });
+
+    it("should return an error if a winner has already been declared", async () => {
+      const gameId = gamePayload.gameId;
+      const winner = players[Math.floor(Math.random() * players.length)];
+      const winningRequestId = new anchor.BN(Math.random() * 1000);
+
+      await program.methods
+        .playGame(gameId, winningRequestId)
+        .accountsStrict({
+          player: winner.keypair.publicKey,
+          config: configAddress,
+          game: gameAddress,
+          prizePool: prizePoolAddress,
+          developerAddress,
+          gameData: winner.gameDataAddress,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([winner.keypair])
+        .rpc();
+
+      await program.methods
+        .declareWinner(
+          gamePayload.gameId,
+          winningRequestId,
+          winner.keypair.publicKey
+        )
+        .accountsStrict({
+          signer: owner.publicKey,
+          game: gameAddress,
+          winnerGameData: winner.gameDataAddress,
+          winnerAddress: winner.keypair.publicKey,
+          prizePool: prizePoolAddress,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([owner])
+        .rpc();
+
+      const promise = program.methods
+        .declareWinner(
+          gamePayload.gameId,
+          winningRequestId,
+          winner.keypair.publicKey
+        )
+        .accountsStrict({
+          signer: owner.publicKey,
+          game: gameAddress,
+          winnerGameData: winner.gameDataAddress,
+          winnerAddress: winner.keypair.publicKey,
+          prizePool: prizePoolAddress,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([owner])
+        .rpc();
+
+      return expect(promise).to.be.rejectedWith(Error, "WinnerDeclared");
     });
 
     it("should set the 'winner' and 'winning_attempt' fields on the game account", async () => {
@@ -707,4 +802,31 @@ describe("lyra", () => {
       expect(winnerGameData.winner).to.be.true;
     });
   });
+
+  describe("get refund", () => {
+    beforeEach(async () => {
+      await initializeConfig();
+      await initializeGame();
+
+      const player = players[0];
+      await enterGame(player, game1);
+
+      await Promise.all(
+        Array(5)
+          .fill(undefined)
+          .map((_) => {
+            const requestId = new anchor.BN(Math.random() * 10000);
+            return playGame(player, game1, requestId);
+          })
+      );
+    });
+  });
+
+  it("should return an error if the game has not started", async () => {});
+
+  it("should return an error if the game has not ended ended", async () => {});
+
+  it("should return an error if the game has a winner", async () => {});
+
+  it("should return an error if the player didn't join the game", async () => {});
 });
