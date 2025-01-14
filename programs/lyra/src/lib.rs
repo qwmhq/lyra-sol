@@ -85,7 +85,7 @@ pub mod lyra {
         Ok(())
     }
 
-    pub fn enter_game(context: Context<EnterGame>, game_id: u64) -> Result<()> {
+    pub fn enter_game(context: Context<EnterGame>, _game_id: u64) -> Result<()> {
         let game = &context.accounts.game;
         let current_timestamp = Clock::get()?.unix_timestamp as u64;
 
@@ -210,7 +210,7 @@ pub mod lyra {
 
     pub fn declare_winner(
         context: Context<DeclareWinner>,
-        game_id: u64,
+        _game_id: u64,
         winning_request_id: u64,
         winner_addr: Pubkey,
     ) -> Result<()> {
@@ -226,7 +226,7 @@ pub mod lyra {
             current_timestamp < game.start_time + game.duration,
             GameError::GameEnded
         );
-        require!(game.winner.is_none(), GameError::GameWon);
+        require!(game.winner.is_none(), GameError::WinnerDeclared);
 
         // set the winner on the game account
         context.accounts.game.winner = Some(winner_addr);
@@ -249,6 +249,44 @@ pub mod lyra {
         let prize = context.accounts.game.prize_pool;
         context.accounts.prize_pool.sub_lamports(prize)?;
         context.accounts.winner_address.add_lamports(prize)?;
+
+        Ok(())
+    }
+
+    pub fn get_refund(context: Context<GetRefund>, _game_id: u64) -> Result<()> {
+        let game = &context.accounts.game;
+        let current_timestamp = Clock::get()?.unix_timestamp as u64;
+
+        // checks
+        require!(
+            game.start_time <= current_timestamp,
+            GameError::GameNotStarted
+        );
+        require!(game.winner.is_none(), GameError::GameWon);
+        require!(
+            current_timestamp > game.start_time + game.duration,
+            GameError::GameInProgress
+        );
+        require!(
+            !context.accounts.game_data.refunded,
+            GameError::RefundClaimed
+        );
+
+        // refund player
+        let refund_due: u64 = context
+            .accounts
+            .game_data
+            .attempts
+            .iter()
+            .map(|x| x.fee)
+            .sum();
+
+        require!(refund_due > 0, GameError::NoRefundDue);
+        context.accounts.prize_pool.sub_lamports(refund_due)?;
+        context.accounts.player.add_lamports(refund_due)?;
+
+        // set refunded flag on player's game account
+        context.accounts.game_data.refunded = true;
 
         Ok(())
     }
@@ -404,6 +442,36 @@ pub struct DeclareWinner<'info> {
     pub system_program: Program<'info, System>,
 }
 
+#[derive(Accounts)]
+#[instruction(game_id: u64)]
+pub struct GetRefund<'info> {
+    #[account(mut)]
+    pub player: Signer<'info>,
+
+    #[account(
+        mut,
+        seeds = [b"game".as_ref(), game_id.to_le_bytes().as_ref()],
+        bump
+    )]
+    pub game: Account<'info, GameAccount>,
+
+    #[account(
+        mut,
+        seeds = [b"game_data".as_ref(), game_id.to_le_bytes().as_ref(), player.key().as_ref()],
+        bump
+    )]
+    pub game_data: Account<'info, GameDataAccount>,
+
+    #[account(
+        mut,
+        seeds = [b"prize_pool".as_ref(), game_id.to_le_bytes().as_ref()],
+        bump
+    )]
+    pub prize_pool: Account<'info, PrizePoolAccount>,
+
+    pub system_program: Program<'info, System>,
+}
+
 #[account]
 #[derive(InitSpace, Debug)]
 pub struct ConfigAccount {
@@ -492,6 +560,9 @@ pub enum GameError {
     #[msg("game has ended")]
     GameEnded,
 
+    #[msg("game is still in progress")]
+    GameInProgress,
+
     #[msg("game has already been won")]
     GameWon,
 
@@ -503,4 +574,13 @@ pub enum GameError {
 
     #[msg("request id already exists")]
     RequestIdAlreadyExists,
+
+    #[msg("request id does not exist")]
+    InvalidRequestId,
+
+    #[msg("refund has been claimed")]
+    RefundClaimed,
+
+    #[msg("you have no refund to claim")]
+    NoRefundDue,
 }
