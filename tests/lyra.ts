@@ -12,7 +12,7 @@ import { Lyra } from "../target/types/lyra";
 import "dotenv/config";
 import { getKeypairFromEnvironment } from "@solana-developers/helpers";
 import { SYSTEM_PROGRAM_ID } from "@coral-xyz/anchor/dist/cjs/native/system";
-import { BanksClient, ProgramTestContext } from "solana-bankrun";
+import { BanksClient, Clock, ProgramTestContext } from "solana-bankrun";
 
 import * as chai from "chai";
 import chaiAsPromised from "chai-as-promised";
@@ -152,6 +152,19 @@ describe("lyra", () => {
       })
       .signers([player.keypair])
       .rpc();
+  };
+
+  const setClockTimeStamp = async (timestamp: bigint) => {
+    const currentClock = await client.getClock();
+    context.setClock(
+      new Clock(
+        currentClock.slot,
+        currentClock.epochStartTimestamp,
+        currentClock.epoch,
+        currentClock.leaderScheduleEpoch,
+        timestamp
+      )
+    );
   };
 
   beforeEach(async () => {
@@ -298,12 +311,6 @@ describe("lyra", () => {
 
     it("should transfer initial prize pool amount to the prize pool account", async () => {
       const prizePoolBalanceBefore = await client.getBalance(prizePoolAddress);
-      const ownerBalance = await client.getBalance(owner.publicKey);
-      console.log(
-        `\n\nowner balance: ${
-          (Number(ownerBalance) * 1.0) / LAMPORTS_PER_SOL
-        } SOL \n\n`
-      );
 
       await program.methods
         .initializeGame({ ...gamePayload })
@@ -334,11 +341,76 @@ describe("lyra", () => {
       await initializeGame();
     });
 
-    it("should return an error if the game has not started", async () => {});
+    it("should return an error if the game has not started", async () => {
+      const game = await program.account.gameAccount.fetch(game1.gameAddress);
+      await setClockTimeStamp(BigInt(game.startTime.toNumber() - 60));
 
-    it("should return an error if the game has ended", async () => {});
+      const promise = program.methods
+        .enterGame(gamePayload.gameId)
+        .accounts({ player: players[0].keypair.publicKey })
+        .signers([players[0].keypair])
+        .rpc();
 
-    it("should return an error if the game has been won", async () => {});
+      return expect(promise).to.be.rejectedWith(Error, "GameNotStarted");
+    });
+
+    it("should return an error if the game has ended", async () => {
+      const game = await program.account.gameAccount.fetch(game1.gameAddress);
+      await setClockTimeStamp(
+        BigInt(game.startTime.toNumber() + game.duration.toNumber() + 60)
+      );
+
+      const promise = program.methods
+        .enterGame(gamePayload.gameId)
+        .accounts({ player: players[0].keypair.publicKey })
+        .signers([players[0].keypair])
+        .rpc();
+
+      return expect(promise).to.be.rejectedWith(Error, "GameEnded");
+    });
+
+    it("should return an error if the game has been won", async () => {
+      const gameId = game1.gameId;
+      const winner = players[0];
+      const winningRequestId = new anchor.BN(Math.random() * 1000);
+
+      // declare the winner
+      await enterGame(winner, game1);
+      await program.methods
+        .playGame(gameId, winningRequestId)
+        .accountsStrict({
+          player: winner.keypair.publicKey,
+          config: configAddress,
+          game: gameAddress,
+          prizePool: prizePoolAddress,
+          developerAddress,
+          gameData: winner.gameDataAddress,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([winner.keypair])
+        .rpc();
+      await program.methods
+        .declareWinner(gameId, winningRequestId, winner.keypair.publicKey)
+        .accountsStrict({
+          signer: owner.publicKey,
+          game: gameAddress,
+          winnerGameData: winner.gameDataAddress,
+          winnerAddress: winner.keypair.publicKey,
+          prizePool: prizePoolAddress,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([owner])
+        .rpc();
+
+      let player = players[1];
+      const promise = program.methods
+        .enterGame(game1.gameId)
+        .accounts({ player: player.keypair.publicKey })
+        .signers([player.keypair])
+        .rpc();
+
+      return expect(promise).to.be.rejectedWith(Error, "GameWon");
+    });
 
     it("should initialize the game data account", async () => {
       await program.methods
@@ -386,9 +458,53 @@ describe("lyra", () => {
     const gameId = gamePayload.gameId;
     const requestId = new anchor.BN(Math.random() * 10000);
 
-    it("should return an error if the game has not started", async () => {});
+    it("should return an error if the game has not started", async () => {
+      const game = await program.account.gameAccount.fetch(game1.gameAddress);
+      await setClockTimeStamp(BigInt(game.startTime.toNumber() - 60));
 
-    it("should return an error if the game has ended", async () => {});
+      const gameId = gamePayload.gameId;
+
+      const promise = program.methods
+        .playGame(gameId, requestId)
+        .accountsStrict({
+          player: players[0].keypair.publicKey,
+          config: configAddress,
+          game: gameAddress,
+          prizePool: prizePoolAddress,
+          developerAddress,
+          gameData: players[0].gameDataAddress,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([players[0].keypair])
+        .rpc();
+
+      return expect(promise).to.be.rejectedWith(Error, "GameNotStarted");
+    });
+
+    it("should return an error if the game has ended", async () => {
+      const game = await program.account.gameAccount.fetch(game1.gameAddress);
+      await setClockTimeStamp(
+        BigInt(game.startTime.toNumber() + game.duration.toNumber() + 60)
+      );
+
+      const gameId = gamePayload.gameId;
+
+      const promise = program.methods
+        .playGame(gameId, requestId)
+        .accountsStrict({
+          player: players[0].keypair.publicKey,
+          config: configAddress,
+          game: gameAddress,
+          prizePool: prizePoolAddress,
+          developerAddress,
+          gameData: players[0].gameDataAddress,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([players[0].keypair])
+        .rpc();
+
+      return expect(promise).to.be.rejectedWith(Error, "GameEnded");
+    });
 
     it("should return an error if player has insufficient balance to cover the query fee", async () => {
       await program.methods
@@ -599,9 +715,55 @@ describe("lyra", () => {
       return expect(promise).to.be.rejectedWith(Error, "ConstraintAddress");
     });
 
-    it("should return an error if the game has not started", async () => {});
+    it("should return an error if the game has not started", async () => {
+      const game = await program.account.gameAccount.fetch(game1.gameAddress);
+      await setClockTimeStamp(BigInt(game.startTime.toNumber() - 60));
 
-    it("should return an error if the game has ended", async () => {});
+      const gameId = gamePayload.gameId;
+      const winner = players[Math.floor(Math.random() * players.length)];
+      const winningRequestId = new anchor.BN(Math.random() * 1000);
+
+      const promise = program.methods
+        .declareWinner(gameId, winningRequestId, winner.keypair.publicKey)
+        .accountsStrict({
+          signer: owner.publicKey,
+          game: gameAddress,
+          winnerGameData: winner.gameDataAddress,
+          winnerAddress: winner.keypair.publicKey,
+          prizePool: prizePoolAddress,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([owner])
+        .rpc();
+
+      return expect(promise).to.be.rejectedWith(Error, "GameNotStarted");
+    });
+
+    it("should return an error if the game has ended", async () => {
+      const game = await program.account.gameAccount.fetch(game1.gameAddress);
+      await setClockTimeStamp(
+        BigInt(game.startTime.toNumber() + game.duration.toNumber() + 60)
+      );
+
+      const gameId = gamePayload.gameId;
+      const winner = players[Math.floor(Math.random() * players.length)];
+      const winningRequestId = new anchor.BN(Math.random() * 1000);
+
+      const promise = program.methods
+        .declareWinner(gameId, winningRequestId, winner.keypair.publicKey)
+        .accountsStrict({
+          signer: owner.publicKey,
+          game: gameAddress,
+          winnerGameData: winner.gameDataAddress,
+          winnerAddress: winner.keypair.publicKey,
+          prizePool: prizePoolAddress,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([owner])
+        .rpc();
+
+      return expect(promise).to.be.rejectedWith(Error, "GameEnded");
+    });
 
     it("should transfer prize pool balance to the winner", async () => {
       const gameId = gamePayload.gameId;
@@ -808,25 +970,188 @@ describe("lyra", () => {
       await initializeConfig();
       await initializeGame();
 
-      const player = players[0];
-      await enterGame(player, game1);
+      await Promise.all(players.map((player) => enterGame(player, game1)));
 
+      // first three players play the game, last two enter but don't play
       await Promise.all(
-        Array(5)
-          .fill(undefined)
-          .map((_) => {
-            const requestId = new anchor.BN(Math.random() * 10000);
-            return playGame(player, game1, requestId);
-          })
+        players.slice(0, 3).map((player) =>
+          Promise.all(
+            Array(2)
+              .fill(undefined)
+              .map((_) => {
+                const requestId = new anchor.BN(Math.random() * 10000);
+                return playGame(player, game1, requestId);
+              })
+          )
+        )
       );
     });
+
+    it("should return an error if the game has not started", async () => {
+      const game = await program.account.gameAccount.fetch(game1.gameAddress);
+      await setClockTimeStamp(BigInt(game.startTime.toNumber() - 60));
+
+      const gameId = game1.gameId;
+      const player = players[3];
+      const promise = program.methods
+        .getRefund(gameId)
+        .accounts({ player: player.keypair.publicKey })
+        .signers([player.keypair])
+        .rpc();
+
+      return expect(promise).to.be.rejectedWith(Error, "GameNotStarted");
+    });
+
+    it("should return an error if the game has not ended ended", async () => {
+      const player = players[0];
+
+      const promise = program.methods
+        .getRefund(game1.gameId)
+        .accounts({ player: player.keypair.publicKey })
+        .signers([player.keypair])
+        .rpc();
+
+      return expect(promise).to.be.rejectedWith(Error, "GameInProgress");
+    });
+
+    it("should return an error if the game has a winner", async () => {
+      const gameId = game1.gameId;
+      const winner = players[0];
+      const winningRequestId = new anchor.BN(Math.random() * 1000);
+
+      // declare the winner
+      await program.methods
+        .playGame(gameId, winningRequestId)
+        .accountsStrict({
+          player: winner.keypair.publicKey,
+          config: configAddress,
+          game: gameAddress,
+          prizePool: prizePoolAddress,
+          developerAddress,
+          gameData: winner.gameDataAddress,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([winner.keypair])
+        .rpc();
+      await program.methods
+        .declareWinner(gameId, winningRequestId, winner.keypair.publicKey)
+        .accountsStrict({
+          signer: owner.publicKey,
+          game: gameAddress,
+          winnerGameData: winner.gameDataAddress,
+          winnerAddress: winner.keypair.publicKey,
+          prizePool: prizePoolAddress,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([owner])
+        .rpc();
+
+      const player = players[1];
+      const promise = program.methods
+        .getRefund(gameId)
+        .accounts({ player: player.keypair.publicKey })
+        .signers([player.keypair])
+        .rpc();
+
+      return expect(promise).to.be.rejectedWith(Error, "GameWon");
+    });
+
+    it("should return an error if the player didn't attempt the game (no refund is due)", async () => {
+      const game = await program.account.gameAccount.fetch(game1.gameAddress);
+      await setClockTimeStamp(
+        BigInt(game.startTime.toNumber() + game.duration.toNumber() + 60)
+      );
+
+      const gameId = game1.gameId;
+      const player = players[3];
+      const promise = program.methods
+        .getRefund(gameId)
+        .accounts({ player: player.keypair.publicKey })
+        .signers([player.keypair])
+        .rpc();
+
+      return expect(promise).to.be.rejectedWith(Error, "NoRefundDue");
+    });
+
+    it("should transfer the refund amount due to the player's account", async () => {
+      const game = await program.account.gameAccount.fetch(game1.gameAddress);
+      await setClockTimeStamp(
+        BigInt(game.startTime.toNumber() + game.duration.toNumber() + 60)
+      );
+
+      const gameId = game1.gameId;
+      const player = players[1];
+      const gameDataAccount = await program.account.gameDataAccount.fetch(
+        player.gameDataAddress
+      );
+      const playerBalanceBefore = await client.getBalance(
+        player.keypair.publicKey
+      );
+      const refundDue = gameDataAccount.attempts
+        .map((x) => x.fee.toNumber())
+        .reduce((acc, curr) => acc + curr);
+
+      await program.methods
+        .getRefund(gameId)
+        .accounts({ player: player.keypair.publicKey })
+        .signers([player.keypair])
+        .rpc();
+
+      const playerBalanceAfter = await client.getBalance(
+        player.keypair.publicKey
+      );
+
+      expect(playerBalanceAfter).to.equal(
+        playerBalanceBefore + BigInt(refundDue)
+      );
+    });
+
+    it("should set the `refunded` flag on the player's game data account", async () => {
+      const game = await program.account.gameAccount.fetch(game1.gameAddress);
+
+      await setClockTimeStamp(
+        BigInt(game.startTime.toNumber() + game.duration.toNumber() + 60)
+      );
+
+      const gameId = game1.gameId;
+      const player = players[1];
+
+      await program.methods
+        .getRefund(gameId)
+        .accounts({ player: player.keypair.publicKey })
+        .signers([player.keypair])
+        .rpc();
+
+      const gameDataAccount = await program.account.gameDataAccount.fetch(
+        player.gameDataAddress
+      );
+
+      expect(gameDataAccount.refunded).to.be.true;
+    });
+
+    it("should return an error if the refund has been claimed previously", async () => {
+      const game = await program.account.gameAccount.fetch(game1.gameAddress);
+
+      await setClockTimeStamp(
+        BigInt(game.startTime.toNumber() + game.duration.toNumber() + 60)
+      );
+
+      const gameId = game1.gameId;
+      const player = players[1];
+
+      await program.methods
+        .getRefund(gameId)
+        .accounts({ player: player.keypair.publicKey })
+        .signers([player.keypair])
+        .rpc();
+
+      const promise = program.methods
+        .getRefund(gameId)
+        .accounts({ player: player.keypair.publicKey })
+        .signers([player.keypair])
+        .rpc();
+
+      return expect(promise).to.be.rejectedWith(Error, "RefundClaimed");
+    });
   });
-
-  it("should return an error if the game has not started", async () => {});
-
-  it("should return an error if the game has not ended ended", async () => {});
-
-  it("should return an error if the game has a winner", async () => {});
-
-  it("should return an error if the player didn't join the game", async () => {});
 });
