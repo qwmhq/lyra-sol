@@ -252,6 +252,57 @@ describe("lyra", () => {
     });
   });
 
+  describe.only("Update Config", () => {
+    beforeEach(async () => {
+      await initializeConfig();
+    });
+
+    const updatedConfigPayload = {
+      baseQueryFee: new anchor.BN(LAMPORTS_PER_SOL / 5),
+      queryFeeIncrement: new anchor.BN(LAMPORTS_PER_SOL / 10),
+      maxQueryFee: new anchor.BN(LAMPORTS_PER_SOL * 2),
+      prizePoolPercentage: 75,
+      developerAddress: developerAddress,
+    };
+
+    it("should return an error when invoked with unauthorized account", async () => {
+      const promise = program.methods
+        .updateConfig({ ...updatedConfigPayload })
+        .accountsPartial({ signer: notOwner.publicKey })
+        .signers([notOwner])
+        .rpc();
+
+      return expect(promise).to.be.rejectedWith(Error, "ConstraintAddress");
+    });
+
+    it("should update config account", async () => {
+      await program.methods
+        .updateConfig({ ...updatedConfigPayload })
+        .signers([owner])
+        .rpc();
+
+      const config = await program.account.configAccount.fetch(configAddress);
+
+      console.log("\n\n", config, "\n\n");
+
+      expect(config.baseQueryFee.toNumber()).to.equal(
+        updatedConfigPayload.baseQueryFee.toNumber()
+      );
+      expect(config.queryFeeIncrement.toNumber()).to.equal(
+        updatedConfigPayload.queryFeeIncrement.toNumber()
+      );
+      expect(config.maxQueryFee.toNumber()).to.equal(
+        updatedConfigPayload.maxQueryFee.toNumber()
+      );
+      expect(config.prizePoolPercentage).to.equal(
+        updatedConfigPayload.prizePoolPercentage
+      );
+      expect(config.developerAddress).to.deep.equal(
+        updatedConfigPayload.developerAddress
+      );
+    });
+  });
+
   describe("Initialize Game", () => {
     beforeEach(async () => {
       await initializeConfig();

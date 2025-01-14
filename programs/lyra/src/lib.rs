@@ -29,6 +29,22 @@ pub mod lyra {
         Ok(())
     }
 
+    pub fn update_config(context: Context<UpdateConfig>, config: ConfigAccount) -> Result<()> {
+        require!(config.base_query_fee > 0, LyraError::InvalidBaseQueryFee);
+        require!(
+            config.max_query_fee > config.base_query_fee,
+            LyraError::InvalidMaxQueryFee
+        );
+        require!(
+            config.prize_pool_percentage > 0 && config.prize_pool_percentage < 100,
+            LyraError::InvalidPrizePoolPercentage
+        );
+
+        context.accounts.config.set_inner(config);
+
+        Ok(())
+    }
+
     pub fn initialize_game(
         context: Context<InitializeGame>,
         game_args: GameCreationArgs,
@@ -301,6 +317,21 @@ pub struct InitializeConfig<'info> {
         init,
         payer = signer,
         space = 8 + ConfigAccount::INIT_SPACE,
+        seeds = [b"config".as_ref()],
+        bump
+    )]
+    pub config: Account<'info, ConfigAccount>,
+
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct UpdateConfig<'info> {
+    #[account(mut, address = OWNER_PUBKEY)]
+    pub signer: Signer<'info>,
+
+    #[account(
+        mut,
         seeds = [b"config".as_ref()],
         bump
     )]
