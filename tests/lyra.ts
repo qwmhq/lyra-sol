@@ -252,7 +252,7 @@ describe("lyra", () => {
     });
   });
 
-  describe.only("Update Config", () => {
+  describe("Update Config", () => {
     beforeEach(async () => {
       await initializeConfig();
     });
@@ -350,9 +350,6 @@ describe("lyra", () => {
       );
       expect(game.initialPrizePool.toNumber()).to.equal(
         gamePayload.initialPrizePool.toNumber()
-      );
-      expect(game.prizePoolPercentage).to.equal(
-        configPayload.prizePoolPercentage
       );
       expect(game.winner).to.be.null;
       expect(game.winningAttempt).to.be.null;
@@ -583,11 +580,12 @@ describe("lyra", () => {
 
     it("should transfer appropriate amount to prize pool and developer accounts", async () => {
       const game = await program.account.gameAccount.fetch(gameAddress);
+      const config = await program.account.configAccount.fetch(configAddress);
       const prizePoolBalanceBefore = await client.getBalance(prizePoolAddress);
       const developerBalanceBefore = await client.getBalance(developerAddress);
 
       const prizePoolShare =
-        (game.currentQueryFee.toNumber() * game.prizePoolPercentage) / 100;
+        (game.currentQueryFee.toNumber() * config.prizePoolPercentage) / 100;
       const developerShare = game.currentQueryFee.toNumber() - prizePoolShare;
 
       await program.methods
@@ -620,6 +618,7 @@ describe("lyra", () => {
 
     it("should update the prize pool on the game account", async () => {
       const gameBefore = await program.account.gameAccount.fetch(gameAddress);
+      const config = await program.account.configAccount.fetch(configAddress);
 
       await program.methods
         .playGame(gameId, requestId)
@@ -640,7 +639,7 @@ describe("lyra", () => {
       expect(gameAfter.prizePool.toNumber()).to.equal(
         gameBefore.prizePool.toNumber() +
           gameBefore.currentQueryFee.toNumber() *
-            (gameBefore.prizePoolPercentage / 100)
+            (config.prizePoolPercentage / 100)
       );
     });
 
@@ -672,8 +671,9 @@ describe("lyra", () => {
 
     it("should store the player attempt", async () => {
       const game = await program.account.gameAccount.fetch(gameAddress);
+      const config = await program.account.configAccount.fetch(configAddress);
       const prizePoolShare =
-        (game.currentQueryFee.toNumber() * game.prizePoolPercentage) / 100;
+        (game.currentQueryFee.toNumber() * config.prizePoolPercentage) / 100;
 
       await program.methods
         .playGame(gameId, requestId)
@@ -814,6 +814,27 @@ describe("lyra", () => {
         .rpc();
 
       return expect(promise).to.be.rejectedWith(Error, "GameEnded");
+    });
+
+    it("should return an error if the winner_address parameter does not match the winner account", async () => {
+      const gameId = gamePayload.gameId;
+      const winner = players[Math.floor(Math.random() * players.length)];
+      const winningRequestId = new anchor.BN(Math.random() * 1000);
+
+      const promise = program.methods
+        .declareWinner(gameId, winningRequestId, Keypair.generate().publicKey)
+        .accountsStrict({
+          signer: owner.publicKey,
+          game: gameAddress,
+          winnerGameData: winner.gameDataAddress,
+          winnerAddress: winner.keypair.publicKey,
+          prizePool: prizePoolAddress,
+          systemProgram: SystemProgram.programId,
+        })
+        .signers([owner])
+        .rpc();
+
+      return expect(promise).to.be.rejectedWith(Error, "MismatchedWinnerAddress");
     });
 
     it("should transfer prize pool balance to the winner", async () => {

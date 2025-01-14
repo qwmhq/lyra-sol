@@ -90,7 +90,6 @@ pub mod lyra {
             duration: game_args.duration,
             initial_prize_pool: game_args.initial_prize_pool,
             prize_pool: game_args.initial_prize_pool,
-            prize_pool_percentage: context.accounts.config.prize_pool_percentage,
             current_query_fee: context.accounts.config.base_query_fee,
             winner: None,
             winning_attempt: None,
@@ -166,7 +165,7 @@ pub mod lyra {
         let prize_pool_account = &context.accounts.prize_pool;
         let developer_account = &context.accounts.developer_address;
 
-        let prize_pool_share = game.current_query_fee * game.prize_pool_percentage as u64 / 100;
+        let prize_pool_share = game.current_query_fee * config.prize_pool_percentage as u64 / 100;
         let developer_share = game.current_query_fee - prize_pool_share;
 
         let tx_1 = system_instruction::transfer(
@@ -228,7 +227,7 @@ pub mod lyra {
         context: Context<DeclareWinner>,
         _game_id: u64,
         winning_request_id: u64,
-        winner_addr: Pubkey,
+        winner_address: Pubkey,
     ) -> Result<()> {
         let game = &context.accounts.game;
         let current_timestamp = Clock::get()?.unix_timestamp as u64;
@@ -243,9 +242,13 @@ pub mod lyra {
             GameError::GameEnded
         );
         require!(game.winner.is_none(), GameError::WinnerDeclared);
+        require!(
+            winner_address == *context.accounts.winner_address.key,
+            GameError::MismatchedWinnerAddress
+        );
 
         // set the winner on the game account
-        context.accounts.game.winner = Some(winner_addr);
+        context.accounts.game.winner = Some(winner_address);
 
         // set the winning attempt on the game account
         let winning_attempt = context
@@ -253,9 +256,11 @@ pub mod lyra {
             .winner_game_data
             .attempts
             .iter()
-            .find(|x| x.request_id == winning_request_id)
-            .unwrap()
-            .clone();
+            .find(|x| x.request_id == winning_request_id);
+
+        require!(winning_attempt.is_some(), GameError::InvalidRequestId);
+
+        let winning_attempt = winning_attempt.unwrap().clone();
         context.accounts.game.winning_attempt = Some(winning_attempt);
 
         // set the winner flag on the winner's gamedata account
@@ -440,7 +445,7 @@ pub struct PlayGame<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(game_id: u64, winner_addr: Pubkey)]
+#[instruction(game_id: u64)]
 pub struct DeclareWinner<'info> {
     #[account(mut, address = OWNER_PUBKEY)]
     pub signer: Signer<'info>,
@@ -530,7 +535,6 @@ pub struct GameAccount {
     pub winning_attempt: Option<PlayerAttempt>,
     pub initial_prize_pool: u64,
     pub prize_pool: u64,
-    pub prize_pool_percentage: u8,
     pub start_time: u64,
     pub duration: u64,
     pub players: u64,
@@ -614,4 +618,7 @@ pub enum GameError {
 
     #[msg("you have no refund to claim")]
     NoRefundDue,
+
+    #[msg("winner address passed in instruction arguments does not match the one provided in accounts")]
+    MismatchedWinnerAddress,
 }
