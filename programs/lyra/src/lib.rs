@@ -243,7 +243,7 @@ pub mod lyra {
         );
         require!(game.winner.is_none(), GameError::WinnerDeclared);
         require!(
-            winner_address == *context.accounts.winner_address.key,
+            winner_address == *context.accounts.winner.key,
             GameError::MismatchedWinnerAddress
         );
 
@@ -269,7 +269,7 @@ pub mod lyra {
         // transfer prize pool balance to the winner
         let prize = context.accounts.game.prize_pool;
         context.accounts.prize_pool.sub_lamports(prize)?;
-        context.accounts.winner_address.add_lamports(prize)?;
+        context.accounts.winner.add_lamports(prize)?;
 
         Ok(())
     }
@@ -346,7 +346,7 @@ pub struct UpdateConfig<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(game_id: u64)]
+#[instruction(game_args: GameCreationArgs)]
 pub struct InitializeGame<'info> {
     #[account(mut, address = OWNER_PUBKEY)]
     pub signer: Signer<'info>,
@@ -361,7 +361,7 @@ pub struct InitializeGame<'info> {
         init,
         payer = signer,
         space = 8 + GameAccount::INIT_SPACE,
-        seeds = [b"game".as_ref(), game_id.to_le_bytes().as_ref()],
+        seeds = [b"game".as_ref(), game_args.game_id.to_le_bytes().as_ref()],
         bump
     )]
     pub game: Account<'info, GameAccount>,
@@ -370,7 +370,7 @@ pub struct InitializeGame<'info> {
         init,
         payer = signer,
         space = 8 + PrizePoolAccount::INIT_SPACE,
-        seeds = [b"prize_pool".as_ref(), game_id.to_le_bytes().as_ref()],
+        seeds = [b"prize_pool".as_ref(), game_args.game_id.to_le_bytes().as_ref()],
         bump
     )]
     pub prize_pool: Account<'info, PrizePoolAccount>,
@@ -459,7 +459,7 @@ pub struct DeclareWinner<'info> {
 
     #[account(
         mut,
-        seeds = [b"game_data".as_ref(), game_id.to_le_bytes().as_ref(), winner_address.key().as_ref()],
+        seeds = [b"game_data".as_ref(), game_id.to_le_bytes().as_ref(), winner.key().as_ref()],
         bump
     )]
     pub winner_game_data: Account<'info, GameDataAccount>,
@@ -473,7 +473,7 @@ pub struct DeclareWinner<'info> {
 
     #[account(mut)]
     /// CHECK: This is safe because we don't read or write from this account
-    pub winner_address: AccountInfo<'info>,
+    pub winner: AccountInfo<'info>,
 
     pub system_program: Program<'info, System>,
 }
