@@ -119,13 +119,6 @@ describe("lyra", () => {
   const initializeGame = () => {
     return program.methods
       .initializeGame({ ...gamePayload })
-      .accountsStrict({
-        signer: owner.publicKey,
-        config: configAddress,
-        game: gameAddress,
-        prizePool: prizePoolAddress,
-        systemProgram: SystemProgram.programId,
-      })
       .signers([owner])
       .rpc();
   };
@@ -141,15 +134,7 @@ describe("lyra", () => {
   const playGame = (player: Player, game: Game, requestId: anchor.BN) => {
     return program.methods
       .playGame(game.gameId, requestId)
-      .accountsStrict({
-        player: player.keypair.publicKey,
-        config: configAddress,
-        game: game.gameAddress,
-        prizePool: game.prizePoolAddress,
-        developerAddress,
-        gameData: player.gameDataAddress,
-        systemProgram: SystemProgram.programId,
-      })
+      .accounts({player: player.keypair.publicKey})
       .signers([player.keypair])
       .rpc();
   };
@@ -219,7 +204,7 @@ describe("lyra", () => {
     it("should return an error when invoked with unauthorized account", async () => {
       const promise = program.methods
         .initializeConfig({ ...configPayload })
-        .accountsPartial({ signer: notOwner.publicKey })
+        .accounts({ signer: notOwner.publicKey })
         .signers([notOwner])
         .rpc();
 
@@ -268,7 +253,7 @@ describe("lyra", () => {
     it("should return an error when invoked with unauthorized account", async () => {
       const promise = program.methods
         .updateConfig({ ...updatedConfigPayload })
-        .accountsPartial({ signer: notOwner.publicKey })
+        .accounts({ signer: notOwner.publicKey })
         .signers([notOwner])
         .rpc();
 
@@ -311,13 +296,7 @@ describe("lyra", () => {
     it("should return an error when invoked with an unauthorized account", () => {
       const promise = program.methods
         .initializeGame({ ...gamePayload })
-        .accountsStrict({
-          signer: notOwner.publicKey,
-          config: configAddress,
-          game: gameAddress,
-          prizePool: prizePoolAddress,
-          systemProgram: SystemProgram.programId,
-        })
+        .accounts({ signer: notOwner.publicKey })
         .signers([notOwner])
         .rpc();
 
@@ -327,13 +306,6 @@ describe("lyra", () => {
     it("should initialize the game account", async () => {
       await program.methods
         .initializeGame({ ...gamePayload })
-        .accountsStrict({
-          signer: owner.publicKey,
-          config: configAddress,
-          game: gameAddress,
-          prizePool: prizePoolAddress,
-          systemProgram: SystemProgram.programId,
-        })
         .signers([owner])
         .rpc();
 
@@ -362,13 +334,6 @@ describe("lyra", () => {
 
       await program.methods
         .initializeGame({ ...gamePayload })
-        .accountsStrict({
-          signer: owner.publicKey,
-          config: configAddress,
-          game: gameAddress,
-          prizePool: prizePoolAddress,
-          systemProgram: SystemProgram.programId,
-        })
         .signers([owner])
         .rpc();
 
@@ -426,27 +391,13 @@ describe("lyra", () => {
       await enterGame(winner, game1);
       await program.methods
         .playGame(gameId, winningRequestId)
-        .accountsStrict({
-          player: winner.keypair.publicKey,
-          config: configAddress,
-          game: gameAddress,
-          prizePool: prizePoolAddress,
-          developerAddress,
-          gameData: winner.gameDataAddress,
-          systemProgram: SystemProgram.programId,
-        })
+        .accounts({player: winner.keypair.publicKey})
         .signers([winner.keypair])
         .rpc();
+
       await program.methods
         .declareWinner(gameId, winningRequestId, winner.keypair.publicKey)
-        .accountsStrict({
-          signer: owner.publicKey,
-          game: gameAddress,
-          winnerGameData: winner.gameDataAddress,
-          winnerAddress: winner.keypair.publicKey,
-          prizePool: prizePoolAddress,
-          systemProgram: SystemProgram.programId,
-        })
+        .accounts({winner: winner.keypair.publicKey})
         .signers([owner])
         .rpc();
 
@@ -514,15 +465,7 @@ describe("lyra", () => {
 
       const promise = program.methods
         .playGame(gameId, requestId)
-        .accountsStrict({
-          player: players[0].keypair.publicKey,
-          config: configAddress,
-          game: gameAddress,
-          prizePool: prizePoolAddress,
-          developerAddress,
-          gameData: players[0].gameDataAddress,
-          systemProgram: SystemProgram.programId,
-        })
+        .accounts({ player: players[0].keypair.publicKey })
         .signers([players[0].keypair])
         .rpc();
 
@@ -539,15 +482,7 @@ describe("lyra", () => {
 
       const promise = program.methods
         .playGame(gameId, requestId)
-        .accountsStrict({
-          player: players[0].keypair.publicKey,
-          config: configAddress,
-          game: gameAddress,
-          prizePool: prizePoolAddress,
-          developerAddress,
-          gameData: players[0].gameDataAddress,
-          systemProgram: SystemProgram.programId,
-        })
+        .accounts({ player: players[0].keypair.publicKey })
         .signers([players[0].keypair])
         .rpc();
 
@@ -563,15 +498,7 @@ describe("lyra", () => {
 
       const promise = program.methods
         .playGame(gameId, requestId)
-        .accountsStrict({
-          player: brokePlayer.keypair.publicKey,
-          config: configAddress,
-          game: gameAddress,
-          prizePool: prizePoolAddress,
-          developerAddress,
-          gameData: brokePlayer.gameDataAddress,
-          systemProgram: SystemProgram.programId,
-        })
+        .accounts({ player: brokePlayer.keypair.publicKey })
         .signers([brokePlayer.keypair])
         .rpc();
 
@@ -590,15 +517,7 @@ describe("lyra", () => {
 
       await program.methods
         .playGame(gameId, requestId)
-        .accountsStrict({
-          player: players[0].keypair.publicKey,
-          config: configAddress,
-          game: gameAddress,
-          prizePool: prizePoolAddress,
-          developerAddress,
-          gameData: players[0].gameDataAddress,
-          systemProgram: SystemProgram.programId,
-        })
+        .accounts({ player: players[0].keypair.publicKey })
         .signers([players[0].keypair])
         .rpc();
 
@@ -622,15 +541,7 @@ describe("lyra", () => {
 
       await program.methods
         .playGame(gameId, requestId)
-        .accountsStrict({
-          player: players[0].keypair.publicKey,
-          config: configAddress,
-          game: gameAddress,
-          prizePool: prizePoolAddress,
-          developerAddress,
-          gameData: players[0].gameDataAddress,
-          systemProgram: SystemProgram.programId,
-        })
+        .accounts({ player: players[0].keypair.publicKey })
         .signers([players[0].keypair])
         .rpc();
 
@@ -649,15 +560,7 @@ describe("lyra", () => {
 
       await program.methods
         .playGame(gameId, requestId)
-        .accountsStrict({
-          player: players[0].keypair.publicKey,
-          config: configAddress,
-          game: gameAddress,
-          prizePool: prizePoolAddress,
-          developerAddress,
-          gameData: players[0].gameDataAddress,
-          systemProgram: SystemProgram.programId,
-        })
+        .accounts({ player: players[0].keypair.publicKey })
         .signers([players[0].keypair])
         .rpc();
 
@@ -677,15 +580,7 @@ describe("lyra", () => {
 
       await program.methods
         .playGame(gameId, requestId)
-        .accountsStrict({
-          player: players[0].keypair.publicKey,
-          config: configAddress,
-          game: gameAddress,
-          prizePool: prizePoolAddress,
-          developerAddress,
-          gameData: players[0].gameDataAddress,
-          systemProgram: SystemProgram.programId,
-        })
+        .accounts({ player: players[0].keypair.publicKey })
         .signers([players[0].keypair])
         .rpc();
 
@@ -709,15 +604,7 @@ describe("lyra", () => {
 
       await program.methods
         .playGame(gameId, requestId)
-        .accountsStrict({
-          player: players[0].keypair.publicKey,
-          config: configAddress,
-          game: gameAddress,
-          prizePool: prizePoolAddress,
-          developerAddress,
-          gameData: players[0].gameDataAddress,
-          systemProgram: SystemProgram.programId,
-        })
+        .accounts({ player: players[0].keypair.publicKey })
         .signers([players[0].keypair])
         .rpc();
 
@@ -730,6 +617,10 @@ describe("lyra", () => {
   });
 
   describe("declare winner", () => {
+    const gameId = game1.gameId;
+    let winner: Player;
+    let winningRequestId: anchor.BN;
+
     beforeEach(async () => {
       await initializeConfig();
       await initializeGame();
@@ -740,6 +631,15 @@ describe("lyra", () => {
           return playGame(player, game1, requestId);
         })
       );
+
+      winner = players[Math.floor(Math.random() * players.length)];
+      winningRequestId = new anchor.BN(Math.random() * 1000);
+
+      await program.methods
+        .playGame(gameId, winningRequestId)
+        .accounts({ player: winner.keypair.publicKey })
+        .signers([winner.keypair])
+        .rpc();
     });
 
     it("should return an error when invoked with unauthorized account", async () => {
@@ -752,13 +652,9 @@ describe("lyra", () => {
           winningRequestId,
           winner.keypair.publicKey
         )
-        .accountsStrict({
+        .accountsPartial({
           signer: notOwner.publicKey,
-          game: gameAddress,
-          winnerGameData: winner.gameDataAddress,
-          winnerAddress: winner.keypair.publicKey,
-          prizePool: prizePoolAddress,
-          systemProgram: SystemProgram.programId,
+          winner: winner.keypair.publicKey,
         })
         .signers([notOwner])
         .rpc();
@@ -770,20 +666,9 @@ describe("lyra", () => {
       const game = await program.account.gameAccount.fetch(game1.gameAddress);
       await setClockTimeStamp(BigInt(game.startTime.toNumber() - 60));
 
-      const gameId = gamePayload.gameId;
-      const winner = players[Math.floor(Math.random() * players.length)];
-      const winningRequestId = new anchor.BN(Math.random() * 1000);
-
       const promise = program.methods
         .declareWinner(gameId, winningRequestId, winner.keypair.publicKey)
-        .accountsStrict({
-          signer: owner.publicKey,
-          game: gameAddress,
-          winnerGameData: winner.gameDataAddress,
-          winnerAddress: winner.keypair.publicKey,
-          prizePool: prizePoolAddress,
-          systemProgram: SystemProgram.programId,
-        })
+        .accounts({ winner: winner.keypair.publicKey })
         .signers([owner])
         .rpc();
 
@@ -802,14 +687,7 @@ describe("lyra", () => {
 
       const promise = program.methods
         .declareWinner(gameId, winningRequestId, winner.keypair.publicKey)
-        .accountsStrict({
-          signer: owner.publicKey,
-          game: gameAddress,
-          winnerGameData: winner.gameDataAddress,
-          winnerAddress: winner.keypair.publicKey,
-          prizePool: prizePoolAddress,
-          systemProgram: SystemProgram.programId,
-        })
+        .accounts({ winner: winner.keypair.publicKey })
         .signers([owner])
         .rpc();
 
@@ -823,39 +701,17 @@ describe("lyra", () => {
 
       const promise = program.methods
         .declareWinner(gameId, winningRequestId, Keypair.generate().publicKey)
-        .accountsStrict({
-          signer: owner.publicKey,
-          game: gameAddress,
-          winnerGameData: winner.gameDataAddress,
-          winnerAddress: winner.keypair.publicKey,
-          prizePool: prizePoolAddress,
-          systemProgram: SystemProgram.programId,
-        })
+        .accounts({ winner: winner.keypair.publicKey })
         .signers([owner])
         .rpc();
 
-      return expect(promise).to.be.rejectedWith(Error, "MismatchedWinnerAddress");
+      return expect(promise).to.be.rejectedWith(
+        Error,
+        "MismatchedWinnerAddress"
+      );
     });
 
     it("should transfer prize pool balance to the winner", async () => {
-      const gameId = gamePayload.gameId;
-      const winner = players[Math.floor(Math.random() * players.length)];
-      const winningRequestId = new anchor.BN(Math.random() * 1000);
-
-      await program.methods
-        .playGame(gameId, winningRequestId)
-        .accountsStrict({
-          player: winner.keypair.publicKey,
-          config: configAddress,
-          game: gameAddress,
-          prizePool: prizePoolAddress,
-          developerAddress,
-          gameData: winner.gameDataAddress,
-          systemProgram: SystemProgram.programId,
-        })
-        .signers([winner.keypair])
-        .rpc();
-
       const game = await program.account.gameAccount.fetch(gameAddress);
       const winnerBalanceBefore = await client.getBalance(
         winner.keypair.publicKey
@@ -867,14 +723,7 @@ describe("lyra", () => {
           winningRequestId,
           winner.keypair.publicKey
         )
-        .accountsStrict({
-          signer: owner.publicKey,
-          game: gameAddress,
-          winnerGameData: winner.gameDataAddress,
-          winnerAddress: winner.keypair.publicKey,
-          prizePool: prizePoolAddress,
-          systemProgram: SystemProgram.programId,
-        })
+        .accounts({ winner: winner.keypair.publicKey })
         .signers([owner])
         .rpc();
 
@@ -888,38 +737,9 @@ describe("lyra", () => {
     });
 
     it("should return an error if a winner has already been declared", async () => {
-      const gameId = gamePayload.gameId;
-      const winner = players[Math.floor(Math.random() * players.length)];
-      const winningRequestId = new anchor.BN(Math.random() * 1000);
-
       await program.methods
-        .playGame(gameId, winningRequestId)
-        .accountsStrict({
-          player: winner.keypair.publicKey,
-          config: configAddress,
-          game: gameAddress,
-          prizePool: prizePoolAddress,
-          developerAddress,
-          gameData: winner.gameDataAddress,
-          systemProgram: SystemProgram.programId,
-        })
-        .signers([winner.keypair])
-        .rpc();
-
-      await program.methods
-        .declareWinner(
-          gamePayload.gameId,
-          winningRequestId,
-          winner.keypair.publicKey
-        )
-        .accountsStrict({
-          signer: owner.publicKey,
-          game: gameAddress,
-          winnerGameData: winner.gameDataAddress,
-          winnerAddress: winner.keypair.publicKey,
-          prizePool: prizePoolAddress,
-          systemProgram: SystemProgram.programId,
-        })
+        .declareWinner(gameId, winningRequestId, winner.keypair.publicKey)
+        .accounts({ winner: winner.keypair.publicKey })
         .signers([owner])
         .rpc();
 
@@ -929,14 +749,7 @@ describe("lyra", () => {
           winningRequestId,
           winner.keypair.publicKey
         )
-        .accountsStrict({
-          signer: owner.publicKey,
-          game: gameAddress,
-          winnerGameData: winner.gameDataAddress,
-          winnerAddress: winner.keypair.publicKey,
-          prizePool: prizePoolAddress,
-          systemProgram: SystemProgram.programId,
-        })
+        .accounts({ winner: winner.keypair.publicKey })
         .signers([owner])
         .rpc();
 
@@ -944,38 +757,13 @@ describe("lyra", () => {
     });
 
     it("should set the 'winner' and 'winning_attempt' fields on the game account", async () => {
-      const gameId = gamePayload.gameId;
-      const winner = players[Math.floor(Math.random() * players.length)];
-      const winningRequestId = new anchor.BN(Math.random() * 1000);
-
-      await program.methods
-        .playGame(gameId, winningRequestId)
-        .accountsStrict({
-          player: winner.keypair.publicKey,
-          config: configAddress,
-          game: gameAddress,
-          prizePool: prizePoolAddress,
-          developerAddress,
-          gameData: winner.gameDataAddress,
-          systemProgram: SystemProgram.programId,
-        })
-        .signers([winner.keypair])
-        .rpc();
-
       await program.methods
         .declareWinner(
           gamePayload.gameId,
           winningRequestId,
           winner.keypair.publicKey
         )
-        .accountsStrict({
-          signer: owner.publicKey,
-          game: gameAddress,
-          winnerGameData: winner.gameDataAddress,
-          winnerAddress: winner.keypair.publicKey,
-          prizePool: prizePoolAddress,
-          systemProgram: SystemProgram.programId,
-        })
+        .accounts({ winner: winner.keypair.publicKey })
         .signers([owner])
         .rpc();
 
@@ -994,38 +782,13 @@ describe("lyra", () => {
     });
 
     it("should set the 'winner' field on the winner's game data account", async () => {
-      const gameId = gamePayload.gameId;
-      const winner = players[Math.floor(Math.random() * players.length)];
-      const winningRequestId = new anchor.BN(Math.random() * 1000);
-
-      await program.methods
-        .playGame(gameId, winningRequestId)
-        .accountsStrict({
-          player: winner.keypair.publicKey,
-          config: configAddress,
-          game: gameAddress,
-          prizePool: prizePoolAddress,
-          developerAddress,
-          gameData: winner.gameDataAddress,
-          systemProgram: SystemProgram.programId,
-        })
-        .signers([winner.keypair])
-        .rpc();
-
       await program.methods
         .declareWinner(
           gamePayload.gameId,
           winningRequestId,
           winner.keypair.publicKey
         )
-        .accountsStrict({
-          signer: owner.publicKey,
-          game: gameAddress,
-          winnerGameData: winner.gameDataAddress,
-          winnerAddress: winner.keypair.publicKey,
-          prizePool: prizePoolAddress,
-          systemProgram: SystemProgram.programId,
-        })
+        .accounts({ winner: winner.keypair.publicKey })
         .signers([owner])
         .rpc();
 
@@ -1074,7 +837,7 @@ describe("lyra", () => {
       return expect(promise).to.be.rejectedWith(Error, "GameNotStarted");
     });
 
-    it("should return an error if the game has not ended ended", async () => {
+    it("should return an error if the game has not ended", async () => {
       const player = players[0];
 
       const promise = program.methods
@@ -1092,29 +855,11 @@ describe("lyra", () => {
       const winningRequestId = new anchor.BN(Math.random() * 1000);
 
       // declare the winner
-      await program.methods
-        .playGame(gameId, winningRequestId)
-        .accountsStrict({
-          player: winner.keypair.publicKey,
-          config: configAddress,
-          game: gameAddress,
-          prizePool: prizePoolAddress,
-          developerAddress,
-          gameData: winner.gameDataAddress,
-          systemProgram: SystemProgram.programId,
-        })
-        .signers([winner.keypair])
-        .rpc();
+      await playGame(winner, game1, winningRequestId);
+
       await program.methods
         .declareWinner(gameId, winningRequestId, winner.keypair.publicKey)
-        .accountsStrict({
-          signer: owner.publicKey,
-          game: gameAddress,
-          winnerGameData: winner.gameDataAddress,
-          winnerAddress: winner.keypair.publicKey,
-          prizePool: prizePoolAddress,
-          systemProgram: SystemProgram.programId,
-        })
+        .accounts({winner: winner.keypair.publicKey})
         .signers([owner])
         .rpc();
 
