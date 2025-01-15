@@ -4,7 +4,6 @@ import {
   Keypair,
   LAMPORTS_PER_SOL,
   PublicKey,
-  SystemProgram,
 } from "@solana/web3.js";
 import { BankrunProvider, startAnchor } from "anchor-bankrun";
 import { assert, expect } from "chai";
@@ -18,7 +17,7 @@ import * as chai from "chai";
 import chaiAsPromised from "chai-as-promised";
 chai.use(chaiAsPromised);
 
-const IDL = require("../target/idl/lyra.json");
+import IDL from "../target/idl/lyra.json";
 
 const programAddress = new PublicKey(
   "7KhyA7H6JsEPuBXoagDusMY8NiZxrgH58yMaSszEpUGw"
@@ -39,7 +38,7 @@ describe("lyra", () => {
     queryFeeIncrement: new anchor.BN(LAMPORTS_PER_SOL / 100),
     maxQueryFee: new anchor.BN(LAMPORTS_PER_SOL),
     prizePoolPercentage: 80,
-    developerAddress: developerAddress,
+    developer: developerAddress,
   };
   const [configAddress] = PublicKey.findProgramAddressSync(
     [Buffer.from("config")],
@@ -196,7 +195,7 @@ describe("lyra", () => {
       ]
     );
     provider = new BankrunProvider(context);
-    program = new Program<Lyra>(IDL, provider);
+    program = new Program<Lyra>(IDL as Lyra, provider);
     client = context.banksClient;
   });
 
@@ -231,8 +230,8 @@ describe("lyra", () => {
       expect(config.prizePoolPercentage).to.equal(
         configPayload.prizePoolPercentage
       );
-      expect(config.developerAddress).to.deep.equal(
-        configPayload.developerAddress
+      expect(config.developer).to.deep.equal(
+        configPayload.developer
       );
     });
   });
@@ -247,7 +246,7 @@ describe("lyra", () => {
       queryFeeIncrement: new anchor.BN(LAMPORTS_PER_SOL / 10),
       maxQueryFee: new anchor.BN(LAMPORTS_PER_SOL * 2),
       prizePoolPercentage: 75,
-      developerAddress: developerAddress,
+      developer: developerAddress,
     };
 
     it("should return an error when invoked with unauthorized account", async () => {
@@ -282,8 +281,8 @@ describe("lyra", () => {
       expect(config.prizePoolPercentage).to.equal(
         updatedConfigPayload.prizePoolPercentage
       );
-      expect(config.developerAddress).to.deep.equal(
-        updatedConfigPayload.developerAddress
+      expect(config.developer).to.deep.equal(
+        updatedConfigPayload.developer
       );
     });
   });
@@ -505,6 +504,16 @@ describe("lyra", () => {
       return expect(promise).to.be.rejectedWith(Error, "InsufficientQueryFee");
     });
 
+    it("should return an error if the passed developer account doesn't match the one stored in config", async () => {
+      const promise = program.methods
+        .playGame(gameId, requestId)
+        .accountsPartial({ player: players[0].keypair.publicKey, developer: Keypair.generate().publicKey })
+        .signers([players[0].keypair])
+        .rpc();
+
+      return expect(promise).to.be.rejectedWith(Error, "ConstraintHasOne");
+    })
+
     it("should transfer appropriate amount to prize pool and developer accounts", async () => {
       const game = await program.account.gameAccount.fetch(gameAddress);
       const config = await program.account.configAccount.fetch(configAddress);
@@ -595,8 +604,8 @@ describe("lyra", () => {
         players[0].keypair.publicKey
       );
       expect(attempt).to.not.be.undefined;
-      expect(attempt.requestId.toNumber()).to.equal(requestId.toNumber());
-      expect(attempt.fee.toNumber()).to.equal(prizePoolShare);
+      expect(attempt!.requestId.toNumber()).to.equal(requestId.toNumber());
+      expect(attempt!.fee.toNumber()).to.equal(prizePoolShare);
     });
 
     it("should increment the attempt count on the game account", async () => {
@@ -776,7 +785,7 @@ describe("lyra", () => {
 
       expect(game.winningAttempt).to.not.be.null;
       expect(
-        game.winningAttempt.requestId.toNumber(),
+        game.winningAttempt!.requestId.toNumber(),
         "winning attempt should contain the correct request id"
       ).to.equal(winningRequestId.toNumber());
     });

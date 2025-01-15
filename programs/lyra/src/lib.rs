@@ -163,7 +163,7 @@ pub mod lyra {
         // transfer to prize pool and developer accounts
         let player_account = &context.accounts.player;
         let prize_pool_account = &context.accounts.prize_pool;
-        let developer_account = &context.accounts.developer_address;
+        let developer_account = &context.accounts.developer;
 
         let prize_pool_share = game.current_query_fee * config.prize_pool_percentage as u64 / 100;
         let developer_share = game.current_query_fee - prize_pool_share;
@@ -412,7 +412,7 @@ pub struct PlayGame<'info> {
     #[account(
         seeds = [b"config".as_ref()],
         bump,
-        has_one = developer_address
+        has_one = developer
     )]
     pub config: Account<'info, ConfigAccount>,
 
@@ -439,7 +439,7 @@ pub struct PlayGame<'info> {
 
     #[account(mut)]
     /// CHECK: This is safe because we don't read or write from this account
-    pub developer_address: AccountInfo<'info>,
+    pub developer: AccountInfo<'info>,
 
     pub system_program: Program<'info, System>,
 }
@@ -515,7 +515,7 @@ pub struct ConfigAccount {
     pub query_fee_increment: u64,
     pub max_query_fee: u64,
     pub prize_pool_percentage: u8,
-    pub developer_address: Pubkey,
+    pub developer: Pubkey,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize)]
